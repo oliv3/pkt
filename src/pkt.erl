@@ -40,6 +40,7 @@
 -define(ICMPHDRLEN, 8).
 -define(ICMP6HDRLEN, 8).
 -define(GREHDRLEN, 4).
+-define(MPLSHDRLEN, 4).
 
 -export([
         checksum/1,
@@ -103,6 +104,12 @@ decapsulate({ipv6, Data}, Packet) when byte_size(Data) >= ?IPV6HDRLEN ->
 decapsulate({gre, Data}, Packet) when byte_size(Data) >= ?GREHDRLEN ->
     {Hdr, Payload} = gre(Data),
     decapsulate({ether_type(Hdr#gre.type), Payload}, [Hdr|Packet]);
+%% MPLS (assert: 1 MPLS packet over ethernet)
+decapsulate({mpls, Data}, [#ether{} = Ether]) when byte_size(Data) >= ?MPLSHDRLEN ->
+    {_Hdr, Payload} = mpls(Data),
+    IPV4 = decapsulate({ipv4, Payload}),
+    %% io:format("[MPLS] ipv4 payload= ~p~n", [IPV4]),
+    decapsulate(stop, lists:reverse([Ether|IPV4]));
 
 decapsulate({tcp, Data}, Packet) when byte_size(Data) >= ?TCPHDRLEN ->
     {Hdr, Payload} = tcp(Data),
@@ -115,6 +122,7 @@ decapsulate({sctp, Data}, Packet) when byte_size(Data) >= 12 ->
     decapsulate(stop, [Payload, Hdr|Packet]);
 decapsulate({icmp, Data}, Packet) when byte_size(Data) >= ?ICMPHDRLEN ->
     {Hdr, Payload} = icmp(Data),
+    %% TODO: IP over ICMP
     decapsulate(stop, [Payload, Hdr|Packet]);
 decapsulate({icmp6, Data}, Packet) when byte_size(Data) >= ?ICMP6HDRLEN ->
     {Hdr, Payload} = icmp6(Data),
@@ -126,6 +134,7 @@ decapsulate({_, Data}, Packet) ->
 ether_type(?ETH_P_IP) -> ipv4;
 ether_type(?ETH_P_IPV6) -> ipv6;
 ether_type(?ETH_P_ARP) -> arp;
+ether_type(?ETH_P_MPLS) -> mpls;
 ether_type(_) -> unsupported.
 
 link_type(?DLT_NULL) -> null;
@@ -309,6 +318,15 @@ gre(#gre{c = 0, res0 = Res0, ver = Ver, type = Type}) ->
 gre(#gre{c = 1, res0 = Res0, ver = Ver, type = Type,
 	chksum = Chksum, res1 = Res1}) ->
     <<1:1,Res0:12,Ver:3,Type:16,Chksum:16,Res1:16>>.
+
+%%
+%% MPLS
+%%
+mpls(<<Label:20, Exp:3, BOS:1, TTL:8, Rest/binary>>) ->
+    {#mpls{label = Label, exp = Exp, bos = BOS, ttl = TTL}, Rest};
+mpls(#mpls{label = Label, exp = Exp, bos = BOS, ttl = TTL}) ->
+    <<Label:20, Exp:3, BOS:1, TTL:8>>.
+
 
 %%
 %% TCP

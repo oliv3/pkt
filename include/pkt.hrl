@@ -3,6 +3,7 @@
 -define(ETH_P_ARP, 16#0806).
 -define(ETH_P_IPV6, 16#86DD).
 -define(ETH_P_ALL, 16#0300).
+-define(ETH_P_MPLS, 16#8847).
 
 -define(ARPHRD_ETHER, 1).
 -define(ARPHRD_IEEE80211, 801).
@@ -291,3 +292,10 @@
         type = ?ETH_P_IP,
         chksum = <<>>, res1 = <<>>
     }).
+
+-record(mpls, {
+	  label,
+	  exp,
+	  bos = 1,
+	  ttl
+}).
